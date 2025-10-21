@@ -61,7 +61,8 @@ const CONFIG = {
     // 5. PARAMETRI DATI E ALGORITMI
     // ====================================================================
 
-    VOXEL_ID_AIR: 0, 
+    VOXEL_ID_AIR: 0,
+    VOXEL_ID_CUT: 255,
     ISO_SURFACE_THRESHOLD: 0.5,
 };
 

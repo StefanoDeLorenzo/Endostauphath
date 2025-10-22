@@ -1,6 +1,6 @@
-import { World } from './src/core/World.js';
+import { World } from './app/core/World.js';
 import { VoxelGenerator } from './tools/VoxelGenerator.js';
-import { OctreeSerializer } from './src/data/OctreeSerializer.js';
+import { OctreeSerializer } from './app/data/OctreeSerializer.js';
 
 const world = new World();
 const generator = new VoxelGenerator();
@@ -24,7 +24,7 @@ document.getElementById('selectDirButton').addEventListener('click', async () =>
 document.getElementById('generateAndSaveButton').addEventListener('click', async () => {
     log("--- Avvio Generazione e Salvataggio ---");
 
-    const R_NAME = CONFIG.DEFAULT_REGION_NAME; // "Overworld"
+    const R_NAME = CONFIG.DEFAULT_REGION_NAME; // "Overworld di default"
     const RX = 0, RY = 0, RZ = 0;
     
     // Creiamo una nuova istanza di RegionFile in RAM

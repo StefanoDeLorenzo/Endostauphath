@@ -99,6 +99,10 @@ export class VoxelGenerator {
         if (rx === 0 && ry === 0 && rz === 0 && chunkIndex === 0 && vx === 0 && vz === 0) {
             console.log(`[GENERATOR DEBUG] Chunk 0, Voxel Y=${vy}: WorldY=${worldY.toFixed(2)}m. ID Attribuito: ${worldY < 10 ? 1 : (worldY < 12 ? 2 : 0)}`);
         }
+        // --- NUOVO DEBUG LOG PER CHUNK 64 ---
+        if (chunkIndex === 64 && vx === 0 && vy === 0 && vz === 0) {
+            console.warn(`[CHUNK 64 DEBUG] Chunk Index 64: absChunkY=${absChunkY} (Atteso 1 se ry=0), absVoxelY=${absVoxelY} (Atteso 16), WorldY=${worldY.toFixed(2)}m (Atteso 24.00m).`);
+        }
         
         // Logica di campionamento
         if (worldY < 10) { 

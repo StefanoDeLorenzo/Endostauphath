@@ -1,5 +1,5 @@
-import { OctreeNode } from '../data/OctreeNode.js';
-import CONFIG from '../core/config.js';
+import { OctreeNode } from '../app/data/OctreeNode.js';
+import CONFIG from '../app/core/config.js';
 
 /**
  * Genera dati voxel iniziali per un Mini-Chunk utilizzando funzioni implicite.

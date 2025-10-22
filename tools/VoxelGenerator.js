@@ -94,8 +94,19 @@ export class VoxelGenerator {
      * @private
      */
     #getMaterialAtVoxel(rx, ry, rz, chunkIndex, vx, vy, vz) {
-        // ... (La logica resta la stessa) ...
-        const worldY = (ry * CONFIG.REGION_CHUNKS_PER_SIDE_Y + this.#getLocalYFromIndex(chunkIndex) * CONFIG.MINI_CHUNK_SIDE_VOXELS + vy) * CONFIG.VOXEL_SIZE_METERS;
+        
+        const VSP = CONFIG.VOXEL_SIZE_METERS;
+        const MCS_Y = CONFIG.MINI_CHUNK_SIDE_VOXELS;
+        const R_C_Y = CONFIG.REGION_CHUNKS_PER_SIDE_Y;
+
+        // Y del Mini-Chunk (indice assoluto):
+        const absChunkY = (ry * R_C_Y) + this.#getLocalYFromIndex(chunkIndex); 
+
+        // Y del Voxel (indice assoluto):
+        const absVoxelY = (absChunkY * MCS_Y) + vy;
+
+        // Coordinata Y del mondo:
+        const worldY = absVoxelY * VSP; // <--- Formula Correta
         
         // Se l'altezza del mondo è sotto un certo livello
         if (worldY < 10) { 

@@ -1,114 +1,155 @@
 import CONFIG from '../core/config.js';
-// Importa la logica di gestione della cache della mappa (non ancora implementata)
+// Assumiamo che l'istanza di World sia iniettata nel costruttore
 // import { World } from '../core/World.js'; 
 
 /**
- * Fornisce un accesso astratto e performante ai dati voxel in memoria.
- * Gestisce la traduzione delle coordinate e la traversata O(logN) dell'Octree.
+ * Fornisce un accesso astratto e performante O(logN) ai dati voxel in memoria.
+ * Esegue la traduzione delle coordinate mondo e la traversata dell'Octree.
  */
 export class VoxelAccessor {
     
     /**
-     * @param {World} worldInstance L'istanza del gestore della mappa che contiene la cache dei Mini-Chunk attivi.
+     * @param {World} worldInstance L'istanza del gestore della mappa (World.js).
      */
     constructor(worldInstance) {
         this.world = worldInstance;
         
         // Pre-calcoli per la conversione rapida delle coordinate
-        this.chunkSideSize = CONFIG.MINI_CHUNK_SIDE_VOXELS;
         this.chunkSizeMeters = CONFIG.MINI_CHUNK_SIZE_METERS;
+        this.chunkSideVoxels = CONFIG.MINI_CHUNK_SIDE_VOXELS;
+        this.maxDepth = CONFIG.OCTREE_MAX_DEPTH;
+        this.rName = CONFIG.DEFAULT_REGION_NAME; // Assume la dimensione di default, modificabile in gioco
     }
 
-    /**
-     * Metodo principale per ottenere il valore (materiale ID) di un voxel.
-     * @param {number} x Coordinata mondo (metri)
-     * @param {number} y Coordinata mondo (metri)
-     * @param {number} z Coordinata mondo (metri)
-     * @returns {{id: number, density: number, level: number}} ID del materiale, densità e livello di dettaglio trovato.
-     */
-    getVoxel(x, y, z) {
-        
-        // 1. TRADUZIONE: Converte le coordinate mondo in coordinate Chunk e Voxel locali.
-        const chunkCoords = this.getChunkCoordinates(x, y, z);
-        const voxelCoords = this.getVoxelCoordinates(x, y, z);
+    // =================================================================
+    // METODO PUBBLICO DI ACCESSO
+    // =================================================================
 
-        // 2. CACHE LOOKUP: Ottiene il Mini-Chunk root node dalla cache del mondo.
-        const chunkRootNode = this.world.getChunkFromCache(chunkCoords.cx, chunkCoords.cy, chunkCoords.cz);
+    /**
+     * Ottiene le informazioni del voxel/materiale in un punto specifico.
+     * @async
+     * @param {number} x Coordinata mondo in metri.
+     * @param {number} y Coordinata mondo in metri.
+     * @param {number} z Coordinata mondo in metri.
+     * @returns {Promise<{id: number, density: number, level: number, found: boolean}>} 
+     * ID del materiale, densità e livello di dettaglio trovato.
+     */
+    async getVoxelInfo(x, y, z) {
+        
+        // 1. Converte le coordinate mondo in coordinate Regione, Chunk e Voxel locali.
+        const coords = this.getChunkAndVoxelCoords(x, y, z);
+
+        // 2. Ottiene la radice del Mini-Chunk (carica se necessario)
+        const chunkRootNode = await this.world.getMiniChunkRoot(
+            this.rName, coords.rx, coords.ry, coords.rz, coords.chunkIndex
+        );
         
         if (!chunkRootNode) {
-            // Se il chunk non è caricato (o è fuori dall'area attiva), assumiamo Aria per la sicurezza.
-            return { id: CONFIG.VOXEL_ID_AIR, density: 0, level: CONFIG.OCTREE_MAX_DEPTH };
+            // Se il chunk non è caricato/esiste, è Aria.
+            return { id: CONFIG.VOXEL_ID_AIR, density: 0, level: 0, found: false };
         }
 
-        // 3. TRAVERSATA: Scende nell'Octree per trovare il nodo foglia.
-        return this.traverseOctree(chunkRootNode, voxelCoords.vx, voxelCoords.vy, voxelCoords.vz);
+        // 3. Esegue la traversata O(logN) sull'Octree.
+        return this.traverseOctree(chunkRootNode, coords.vx, coords.vy, coords.vz);
     }
 
+    // =================================================================
+    // LOGICA DI TRADUZIONE DELLE COORDINATE
+    // =================================================================
+
     /**
-     * Converte coordinate mondo (metri) in coordinate Mini-Chunk (indice di regione).
+     * Converte le coordinate mondo in metri in indici Region/Chunk/Voxel.
      * @private
      */
-    getChunkCoordinates(x, y, z) {
-        // (Logica da implementare: Divisione e floor per trovare l'indice del Mini-Chunk)
-        const cx = Math.floor(x / this.chunkSizeMeters);
-        const cy = Math.floor(y / this.chunkSizeMeters);
-        const cz = Math.floor(z / this.chunkSizeMeters);
-        return { cx, cy, cz };
+    getChunkAndVoxelCoords(x, y, z) {
+        // Coordinate Mini-Chunk nel mondo (indice assoluto)
+        const absCX = Math.floor(x / this.chunkSizeMeters);
+        const absCY = Math.floor(y / this.chunkSizeMeters);
+        const absCZ = Math.floor(z / this.chunkSizeMeters);
+        
+        // Coordinate della Regione (dividi per la cardinalità della Regione)
+        const rx = Math.floor(absCX / CONFIG.REGION_CHUNKS_PER_SIDE_XZ);
+        const ry = Math.floor(absCY / CONFIG.REGION_CHUNKS_PER_SIDE_Y);
+        const rz = Math.floor(absCZ / CONFIG.REGION_CHUNKS_PER_SIDE_XZ);
+
+        // Coordinate del Mini-Chunk all'interno della Regione (0-7 per XZ, 0-1 per Y)
+        const localCX = absCX % CONFIG.REGION_CHUNKS_PER_SIDE_XZ;
+        const localCY = absCY % CONFIG.REGION_CHUNKS_PER_SIDE_Y;
+        const localCZ = absCZ % CONFIG.REGION_CHUNKS_PER_SIDE_XZ;
+        
+        // Indice lineare del Mini-Chunk (0 - 127)
+        const chunkIndex = 
+            localCX + 
+            localCY * CONFIG.REGION_CHUNKS_PER_SIDE_XZ + 
+            localCZ * CONFIG.REGION_CHUNKS_PER_SIDE_XZ * CONFIG.REGION_CHUNKS_PER_SIDE_Y;
+
+        // Coordinate del Voxel all'interno del Mini-Chunk (0-15)
+        const vx = Math.floor((x % this.chunkSizeMeters) / CONFIG.VOXEL_SIZE_METERS);
+        const vy = Math.floor((y % this.chunkSizeMeters) / CONFIG.VOXEL_SIZE_METERS);
+        const vz = Math.floor((z % this.chunkSizeMeters) / CONFIG.VOXEL_SIZE_METERS);
+        
+        return { rx, ry, rz, chunkIndex, vx, vy, vz };
     }
+
+    // =================================================================
+    // LOGICA DI TRAVERSATA DELL'OCTREE
+    // =================================================================
     
     /**
-     * Converte coordinate mondo (metri) in coordinate Voxel Locali (0-15).
+     * Esegue la traversata O(logN) sull'Octree per trovare il nodo foglia.
      * @private
-     */
-    getVoxelCoordinates(x, y, z) {
-         // (Logica da implementare: Modulo e mappatura delle coordinate all'interno del Mini-Chunk 0-15)
-        // ...
-        return { vx: 0, vy: 0, vz: 0 }; 
-    }
-
-    /**
-     * Esegue la traversata ricorsiva O(logN) sull'Octree.
-     * @private
-     * @param {OctreeNode} node Nodo corrente.
-     * @param {number} vx Coordinata locale x.
-     * @param {number} vy Coordinata locale y.
-     * @param {number} vz Coordinata locale z.
+     * @param {OctreeNode} node Nodo radice del Mini-Chunk.
+     * @param {number} vx Coordinata voxel locale (0-15) all'interno del Mini-Chunk.
+     * @param {number} vy Coordinata voxel locale (0-15).
+     * @param {number} vz Coordinata voxel locale (0-15).
      */
     traverseOctree(node, vx, vy, vz) {
         let currentNode = node;
         let currentLevel = currentNode.level;
         
-        // Calcola la dimensione corrente del cubo rappresentato dal nodo (in termini di voxel base)
-        let nodeSize = 1 << (CONFIG.OCTREE_MAX_DEPTH - currentLevel); 
-
-        // Loop fino a raggiungere un nodo foglia
-        while (currentLevel < CONFIG.OCTREE_MAX_DEPTH) {
-            if (currentNode.isLeaf()) {
-                 // Trovato un nodo foglia compresso.
-                // Restituiamo il suo ID materiale e assumiamo densità perfetta per la compressione.
-                return { 
-                    id: currentNode.materialID, 
-                    density: currentNode.materialID === CONFIG.VOXEL_ID_AIR ? 0 : 1, 
-                    level: currentLevel 
-                };
-            }
-
-            // Calcolo del figlio: Sfruttiamo i bit di vx, vy, vz per trovare l'indice del figlio (Morton Code)
+        // La dimensione logica del cubo rappresentato dal nodo corrente (in voxel base)
+        let nodeSize = this.chunkSideVoxels >> currentLevel; // 16, 8, 4, 2, 1, 0.5, 0.25...
+        
+        let localX = vx;
+        let localY = vy;
+        let localZ = vz;
+        
+        // La traversata ricorsiva (o iterativa, come in questo caso)
+        while (!currentNode.isLeaf() && currentNode.children && currentLevel < this.maxDepth) {
+            
+            // Determina la metà del volume del nodo corrente
             const halfSize = nodeSize / 2;
-            const childIndex = (vx >= halfSize ? 4 : 0) + (vy >= halfSize ? 2 : 0) + (vz >= halfSize ? 1 : 0);
+            
+            // Calcolo dell'indice del figlio (Morton Code / Z-Order)
+            // [0, 1] -> [2, 3] -> [4, 5] -> [6, 7]
+            const childIndex = 
+                (localX >= halfSize ? 4 : 0) + 
+                (localY >= halfSize ? 2 : 0) + 
+                (localZ >= halfSize ? 1 : 0);
             
             currentNode = currentNode.children[childIndex];
+            
+            // Aggiorna le coordinate relative per il prossimo livello (modulo/offset)
+            localX %= halfSize;
+            localY %= halfSize;
+            localZ %= halfSize;
+            
             currentLevel++;
             nodeSize = halfSize;
-            
-            // Aggiorna le coordinate relative per il prossimo livello
-            vx %= halfSize;
-            vy %= halfSize;
-            vz %= halfSize;
         }
 
-        // Se raggiungiamo il livello massimo (Livello 9) e non è un nodo foglia,
-        // dovremmo leggere direttamente da subVoxelData, ma per ora lo saltiamo.
-        return { id: currentNode.materialID, density: 1, level: currentLevel };
+        // Trovato un nodo foglia o raggiunto il livello massimo
+        
+        // TODO: Aggiungere qui la logica per leggere da subVoxelData al Livello 9
+        
+        // DENSITÀ: Per il DC, è 1 per il Solido, 0 per l'Aria
+        const density = (currentNode.materialID !== CONFIG.VOXEL_ID_AIR) ? 1 : 0;
+        
+        return { 
+            id: currentNode.materialID, 
+            density: density, 
+            level: currentLevel,
+            found: true
+        };
     }
 }

@@ -1,6 +1,6 @@
-import { World } from './core/World.js';
-import { VoxelAccessor } from './data/VoxelAccessor.js';
-import CONFIG from './core/config.js'; // Assicurati che CONFIG sia importato
+import { World } from './app/core/World.js';
+import { VoxelAccessor } from './app/data/VoxelAccessor.js';
+import CONFIG from './app/core/config.js'; // Assicurati che CONFIG sia importato
 
 const world = new World();
 const accessor = new VoxelAccessor(world); // Inietta World in VoxelAccessor

@@ -3,7 +3,7 @@ import CONFIG from '../core/config.js';
 /**
  * Gestisce l'I/O per un singolo File Regione.
  * Responsabilità: Tabella Indici, Dati Raw e Fornire il payload binario (ArrayBuffer)
- * di un Mini-Chunk. NON conosce la struttura Octree.
+ * di un Mini-Chunk. NON conosce la struttura Octree. ###
  */
 export class RegionFile {
     

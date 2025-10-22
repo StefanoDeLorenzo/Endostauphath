@@ -1,6 +1,6 @@
-import { World } from './core/World.js';
+import { World } from './src/core/World.js';
 import { VoxelGenerator } from './tools/VoxelGenerator.js';
-import { OctreeSerializer } from './data/OctreeSerializer.js';
+import { OctreeSerializer } from './src/data/OctreeSerializer.js';
 
 const world = new World();
 const generator = new VoxelGenerator();

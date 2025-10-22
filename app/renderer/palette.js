@@ -4,7 +4,11 @@
  * * I colori sono in formato RGBA normalizzato (0.0 a 1.0) come array [R, G, B, A] 
  * per la compatibilità con i buffer dei motori 3D (es. Babylon.js).
  */
-import CONFIG from '../core/config.js'; 
+import CONFIG from '../core/config.js'; // Importa CONFIG come sorgente di verità per gli ID globali.
+
+// Esportiamo le costanti ID fondamentali, prendendo VOXEL_ID_AIR da CONFIG.
+export const VOXEL_ID_AIR = CONFIG.VOXEL_ID_AIR;
+export const VOXEL_ID_CUT = CONFIG.VOXEL_ID_CUT;
 
 
 // Definizione della Palette (array indicizzato per ID)
@@ -12,7 +16,7 @@ import CONFIG from '../core/config.js';
 export const MaterialPalette = [
     // [0] - ARIA (Deve essere sempre il primo)
     { 
-        id: CONFIG.VOXEL_ID_AIR, 
+        id: VOXEL_ID_AIR, 
         name: "Air", 
         color: [0.0, 0.0, 0.0, 0.0], // Trasparente
         solid: false

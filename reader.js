@@ -61,7 +61,7 @@ document.getElementById('readAndTestButton').addEventListener('click', async () 
     // Dobbiamo calcolare le coordinate del mondo per quel chunk. (Assumiamo che Chunk 64 sia sopra la superficie)
     // Se la tua generazione è solo a y=0, Chunk 64 probabilmente è tutto aria (ID 0).
     const CHUNK64_START_X = CONFIG.MINI_CHUNK_SIZE_METERS * 4; // Esempio
-    const CHUNK64_TEST_Y = 25.0; // 1 metro
+    const CHUNK64_TEST_Y = 25.0; // 25 metri
 
     await runTestPoint(CHUNK64_START_X + 1.0, CHUNK64_TEST_Y, 1.0, CONFIG.VOXEL_ID_AIR, "CHUNK 64 (Aria)"); 
 

@@ -1,3 +1,4 @@
+import CONFIG from './app/core/config.js';
 import { World } from './app/core/World.js';
 import { VoxelGenerator } from './tools/VoxelGenerator.js';
 import { OctreeSerializer } from './app/data/OctreeSerializer.js';

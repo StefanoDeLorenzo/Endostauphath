@@ -15,6 +15,7 @@ const CONFIG = {
     // ====================================================================
     // 2. STRUTTURA DEL FILE REGIONE (I/O) 💾
     // ====================================================================
+    INDEX_RECORD_SIZE_BYTES: 16,      // Dimensione di ogni record indice (Offset, Size, Timestamp)
     
     REGION_MAX_FILE_SIZE_MB: 2.0,           // Limite I/O (2 MB)
     

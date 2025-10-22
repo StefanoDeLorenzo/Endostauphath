@@ -62,9 +62,50 @@ export class OctreeSerializer {
      * @param {OctreeNode} root Il nodo radice del Mini-Chunk.
      * @returns {ArrayBuffer} Dati binari serializzati.
      */
+    /**
+     * Converte un OctreeNode in un ArrayBuffer binario compresso (Serializzazione).
+     * @param {OctreeNode} root Il nodo radice del Mini-Chunk.
+     * @returns {ArrayBuffer} Dati binari serializzati.
+     */
     static serialize(root) {
-        // Logica inversa a deserialize: traversata ricorsiva e scrittura su DataView.
-        // ... (Implementazione successiva)
-        return new ArrayBuffer(0);
+        const bytes = [];
+        
+        // Funzione ricorsiva che scrive i byte nell'array 'bytes'
+        const writeNode = (node) => {
+            
+            // 1. Scrive lo Stato (1 byte)
+            bytes.push(node.state); 
+            
+            // --- Caso FOGLIA (EMPTY o SOLID) ---
+            if (node.isLeaf()) {
+                // 2. Scrive il Material ID (1 byte)
+                // Se il nodo è vuoto, viene scritto CONFIG.VOXEL_ID_AIR (0).
+                // Se è solido, viene scritto il suo Material ID (1-254).
+                bytes.push(node.materialID); 
+                
+                // NOTA SUL DC: Se devi salvare surfaceData, la logica andrebbe qui, 
+                // con un formato più complesso che include i float per posizione e normale.
+                return;
+            }
+            
+            // --- Caso NODO INTERNO (MIXED) ---
+            
+            // Ricorsione: Scrive gli 8 figli
+            for (let i = 0; i < 8; i++) {
+                if (node.children[i]) {
+                    writeNode(node.children[i]);
+                } else {
+                    // Questo non dovrebbe succedere se il pruning è corretto,
+                    // ma è un fallback di sicurezza.
+                    console.error("Errore di serializzazione: figlio nullo in nodo MIXED.");
+                }
+            }
+        };
+
+        // Inizia la scrittura dalla radice
+        writeNode(root);
+        
+        // Converte l'array di byte temporaneo in ArrayBuffer finale
+        return new Uint8Array(bytes).buffer;
     }
 }

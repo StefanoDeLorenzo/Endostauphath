@@ -14,7 +14,7 @@ export class RegionFile {
      */
     constructor(rName, rx, ry, rz) {
         this.regionID = `R_${rName}_${rx}_${ry}_${rz}`;
-        
+
         // Nuovi campi per le coordinate e il nome
         this.rName = rName;
         this.rx = rx;
@@ -44,14 +44,21 @@ export class RegionFile {
     }
 
     /**
-     * Metodo fittizio: Carica il file regione binario dal disco/server in this.rawData.
+     * Carica i dati binari grezzi (ArrayBuffer) del file regione.
      * @async
-     * @param {string} url Percorso del file regione.
+     * @param {ArrayBuffer} rawDataBuffer Dati binari letti dal disco locale.
      */
-    async loadFile(url) {
-        // Logica I/O (es. fetch) andrebbe qui.
-        // Esempio: this.rawData = await fetch(url).then(r => r.arrayBuffer());
-        // this.parseIndexTable();
+    async loadFile(rawDataBuffer) {
+        this.rawData = rawDataBuffer;
+        
+        if (rawDataBuffer && rawDataBuffer.byteLength > 0) {
+            // Analizza la Tabella Indici all'inizio del buffer
+            this.parseIndexTable(); 
+        } else {
+            // File vuoto (tutto Aria), inizializza la tabella come vuota.
+            this.indexTable.fill(null);
+        }
+
         this.isLoaded = true;
     }
     

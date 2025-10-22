@@ -108,6 +108,11 @@ export class VoxelGenerator {
         // Coordinata Y del mondo:
         const worldY = absVoxelY * VSP; // <--- Formula Correta
         
+        // DEBUG: CONTROLLA SE IL CHUNK 0 VIENE VISTO CORRETTAMENTE
+        if (rx === 0 && ry === 0 && rz === 0 && chunkIndex === 0 && vx === 0 && vz === 0) {
+            console.log(`[GENERATOR DEBUG] Chunk 0, Voxel Y=${vy}: WorldY=${worldY.toFixed(2)}m. ID Attribuito: ${worldY < 10 ? 1 : (worldY < 12 ? 2 : 0)}`);
+        }
+
         // Se l'altezza del mondo è sotto un certo livello
         if (worldY < 10) { 
             return 1; // ID Terreno

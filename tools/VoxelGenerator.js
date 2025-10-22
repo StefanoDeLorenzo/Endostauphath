@@ -7,21 +7,7 @@ import CONFIG from '../app/core/config.js';
  */
 export class VoxelGenerator {
     
-    /**
-     * @param {number} rName Il nome della regione (Dimensione)
-     * @param {number} rx, ry, rz Coordinate della Regione
-     * @param {number} chunkIndex Indice locale del Mini-Chunk (0-127)
-     * @returns {OctreeNode} La radice dell'Octree per il Mini-Chunk generato.
-     */
-    generateChunk(rName, rx, ry, rz, chunkIndex) {
-        // La generazione del chunk inizia sempre dalla radice (Livello 0)
-        return this.#generateNodeRecursive(
-            0, // Livello 0
-            0, 0, 0, // Coordinate locali (0, 0, 0) relative al chunk
-            CONFIG.MINI_CHUNK_SIDE_VOXELS, // Lato iniziale in voxel (16)
-            rx, ry, rz, chunkIndex
-        );
-    }
+    // ... (generateChunk) ...
 
     /**
      * Determina se un volume è uniforme, solido, o misto.
@@ -30,12 +16,10 @@ export class VoxelGenerator {
     #generateNodeRecursive(level, vx, vy, vz, size, rx, ry, rz, chunkIndex) {
         
         // 1. Raggiunto il livello base del voxel (Foglia finale)
-        if (size <= 1) { 
-            // Questo è il livello di campionamento più fine (materialID 0-254).
+        if (size <= 1) { // <--- Questo è il Livello 4
             const materialID = this.#getMaterialAtVoxel(rx, ry, rz, chunkIndex, vx, vy, vz);
             
-            // Il nodo foglia finale non può essere ulteriormente suddiviso.
-            // Il costruttore imposterà lo stato a EMPTY/SOLID.
+            // Ritorna sempre una foglia
             return new OctreeNode(level, materialID); 
         }
 
@@ -46,7 +30,6 @@ export class VoxelGenerator {
         let isMixed = false;
         
         for (let i = 0; i < 8; i++) {
-            // Calcola l'offset locale per il figlio
             const offsetX = (i & 4) ? halfSize : 0;
             const offsetY = (i & 2) ? halfSize : 0;
             const offsetZ = (i & 1) ? halfSize : 0;
@@ -57,42 +40,33 @@ export class VoxelGenerator {
                 halfSize, rx, ry, rz, chunkIndex
             );
             
-            children.push(childNode);
+            children.push(childNode); // <--- Aggiungiamo sempre il figlio
 
             // Controlla se il volume è omogeneo
             if (childNode.isLeaf()) {
-                // Se è una foglia, controlla l'ID del materiale
                 if (firstMaterialID === -1) {
                     firstMaterialID = childNode.materialID;
                 } else if (firstMaterialID !== childNode.materialID) {
                     isMixed = true; // Diversi ID materiali tra le foglie
                 }
             } else {
-                isMixed = true; // Se un figlio non è una foglia (è già un nodo MIXED), l'attuale è misto
+                isMixed = true; // Se un figlio è MIXED
             }
         }
 
         // 3. Potatura (Pruning)
-        // Se non è misto E abbiamo trovato un materiale uniforme
         if (!isMixed && firstMaterialID !== -1) {
-            // Tutti gli 8 figli sono foglie e hanno lo stesso materialID.
-            // Ritorna una singola foglia al posto di 8 per massima compressione.
-            // Ereditiamo il materiale del volume
+            // Ritorna la foglia compressa
             return new OctreeNode(level, firstMaterialID);
         }
 
         // 4. Nodo Misto (MIXED)
-        // Se non potiamo, creiamo un nodo interno. 
-        // L'ID del materiale è CONFIG.VOXEL_ID_CUT (255) per indicare al Serializer che è MIXED.
         const parentNode = new OctreeNode(level, CONFIG.VOXEL_ID_CUT); 
-        parentNode.children = children;
+        parentNode.children = children; // <--- Assegnazione dei 8 figli
         return parentNode;
     }
 
-    /**
-     * Funzione fittizia per ottenere il Material ID in un punto specifico del Voxel.
-     * @private
-     */
+    // ... (#getMaterialAtVoxel con la corretta worldY) ...
     #getMaterialAtVoxel(rx, ry, rz, chunkIndex, vx, vy, vz) {
         
         const VSP = CONFIG.VOXEL_SIZE_METERS;
@@ -101,19 +75,18 @@ export class VoxelGenerator {
 
         // Y del Mini-Chunk (indice assoluto):
         const absChunkY = (ry * R_C_Y) + this.#getLocalYFromIndex(chunkIndex); 
-
         // Y del Voxel (indice assoluto):
         const absVoxelY = (absChunkY * MCS_Y) + vy;
 
         // Coordinata Y del mondo:
-        const worldY = absVoxelY * VSP; // <--- Formula Correta
+        const worldY = absVoxelY * VSP;
         
         // DEBUG: CONTROLLA SE IL CHUNK 0 VIENE VISTO CORRETTAMENTE
         if (rx === 0 && ry === 0 && rz === 0 && chunkIndex === 0 && vx === 0 && vz === 0) {
             console.log(`[GENERATOR DEBUG] Chunk 0, Voxel Y=${vy}: WorldY=${worldY.toFixed(2)}m. ID Attribuito: ${worldY < 10 ? 1 : (worldY < 12 ? 2 : 0)}`);
         }
-
-        // Se l'altezza del mondo è sotto un certo livello
+        
+        // Logica di campionamento
         if (worldY < 10) { 
             return 1; // ID Terreno
         }
@@ -123,12 +96,8 @@ export class VoxelGenerator {
         return CONFIG.VOXEL_ID_AIR; // Aria (0)
     }
     
-    /**
-     * Funzione di utility per estrarre la Y locale dal chunkIndex
-     * @private
-     */
+    // ... (#getLocalYFromIndex) ...
     #getLocalYFromIndex(chunkIndex) {
-        // Implementazione inversa della logica di World.getChunkAndVoxelCoords
         return Math.floor(chunkIndex / (CONFIG.REGION_CHUNKS_PER_SIDE_XZ * CONFIG.REGION_CHUNKS_PER_SIDE_XZ));
     }
 }

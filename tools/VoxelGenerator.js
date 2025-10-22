@@ -7,7 +7,21 @@ import CONFIG from '../app/core/config.js';
  */
 export class VoxelGenerator {
     
-    // ... (generateChunk) ...
+    /**
+     * @param {number} rName Il nome della regione (Dimensione)
+     * @param {number} rx, ry, rz Coordinate della Regione
+     * @param {number} chunkIndex Indice locale del Mini-Chunk (0-127)
+     * @returns {OctreeNode} La radice dell'Octree per il Mini-Chunk generato.
+     */
+    generateChunk(rName, rx, ry, rz, chunkIndex) {
+        // La generazione del chunk inizia sempre dalla radice (Livello 0)
+        return this.#generateNodeRecursive(
+            0, // Livello 0
+            0, 0, 0, // Coordinate locali (0, 0, 0) relative al chunk
+            CONFIG.MINI_CHUNK_SIDE_VOXELS, // Lato iniziale in voxel (16)
+            rx, ry, rz, chunkIndex
+        );
+    }
 
     /**
      * Determina se un volume è uniforme, solido, o misto.

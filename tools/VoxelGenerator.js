@@ -78,9 +78,8 @@ export class VoxelGenerator {
         }
 
         // 4. Nodo Misto (MIXED)
-        const parentNode = new OctreeNode(level, 0);
-        parentNode.initializeChildren();
-        parentNode.children = children;
+        const parentNode = new OctreeNode(level, CONFIG.VOXEL_ID_CUT); 
+        parentNode.children = children; // La chiamata a initializeChildren è superflua, basta assegnare l'array
         return parentNode;
     }
 

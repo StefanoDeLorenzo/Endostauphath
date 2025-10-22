@@ -9,103 +9,139 @@ import CONFIG from '../core/config.js';
 export class OctreeSerializer {
     
     /**
-     * Converte un ArrayBuffer binario in un oggetto OctreeNode (Ricostruzione dell'albero).
-     * @param {ArrayBuffer} buffer Dati binari serializzati del Mini-Chunk.
-     * @returns {OctreeNode} La radice del Mini-Chunk ricostruito.
+     * Deserializza un ArrayBuffer binario in un OctreeNode.
+     * Include controlli di sicurezza per evitare di leggere oltre i limiti del buffer.
+     * @param {ArrayBuffer} buffer Il buffer binario del Mini-Chunk.
+     * @returns {OctreeNode} La radice dell'Octree.
      */
     static deserialize(buffer) {
+        // 1. Controlli Iniziali di Validità
         if (!buffer || buffer.byteLength === 0) {
-            // Caso 1: ArrayBuffer vuoto = Mini-Chunk totalmente vuoto (Aria)
+            // Se il buffer non esiste o è vuoto (segno di un chunk EMPTY/ARIA non serializzato),
+            // restituisci una foglia ARIA/EMPTY a livello 0.
             return new OctreeNode(0, CONFIG.VOXEL_ID_AIR); 
         }
+
+        const data = new Uint8Array(buffer);
+        let readOffset = 0;
         
-        // Creiamo un DataView per leggere i tipi di dato con l'endianness corretto.
-        const dataView = new DataView(buffer);
-        let byteOffset = 0;
-        
-        // Funzione ricorsiva o iterativa per leggere i nodi.
-        const readNode = (level) => {
-            // Esempio: Leggiamo 1 byte per lo Stato e il MaterialID
-            // Il formato del primo byte deve essere concordato:
-            // Bit 0-1: Stato (EMPTY/SOLID/MIXED)
-            // Bit 2-7: MaterialID (o solo i primi 6 bit)
-            
-            // Per semplicità, assumiamo che il primo byte sia lo stato (0, 1, o 2)
-            const state = dataView.getUint8(byteOffset);
-            byteOffset += 1;
-            
-            if (state === OctreeNode.STATE.EMPTY || state === OctreeNode.STATE.SOLID) {
-                // Nodo Foglia: Leggiamo l'ID del Materiale (es. 1 byte)
-                const materialID = dataView.getUint8(byteOffset);
-                byteOffset += 1;
-                return new OctreeNode(level, materialID);
+        // Helper per la lettura del prossimo byte con controllo di confine
+        const readNextByte = () => {
+            if (readOffset >= data.length) {
+                // ERRORE CRITICO: Il file è finito inaspettatamente. 
+                // Segnala un file Octree malformato (troncato).
+                throw new Error("Octree Deserialization Error: Buffer ended unexpectedly. File is likely corrupted.");
             }
-            
-            // Nodo Interno (MIXED): Non ha un ID materiale in questo punto.
-            const node = new OctreeNode(level, 0); // Lo stato verrà aggiornato a MIXED
-            node.initializeChildren();
-            node.state = OctreeNode.STATE.MIXED; // Forza lo stato MIXED
-            
-            // Ricorsione per i 8 figli
-            for (let i = 0; i < 8; i++) {
-                node.children[i] = readNode(level + 1);
-            }
-            
-            return node;
+            const byte = data[readOffset];
+            readOffset++;
+            return byte;
         };
-        
-        return readNode(0); // Inizia la lettura dalla radice (Livello 0)
+
+        const readNodeRecursive = (level) => {
+            const stateByte = readNextByte(); // Leggiamo il prossimo byte
+
+            if (stateByte === CONFIG.VOXEL_ID_CUT) {
+                // Caso MIXED (Nodo Interno)
+                
+                const node = new OctreeNode(level, CONFIG.VOXEL_ID_CUT); 
+                node.children = []; // Inizializza l'array figli
+
+                for (let i = 0; i < 8; i++) {
+                    const child = readNodeRecursive(level + 1);
+                    if (!child) {
+                        // Se la ricorsione fallisce qui, il file è troncato
+                        throw new Error(`Octree Deserialization Error: Missing child node at level ${level + 1}.`);
+                    }
+                    node.children.push(child);
+                }
+                
+                // Lo stato è già impostato a MIXED nel costruttore se materialID è CUT
+                return node;
+                
+            } else {
+                // Caso FOGLIA (EMPTY o SOLID)
+                // stateByte è il Material ID (0-254)
+                return new OctreeNode(level, stateByte); 
+            }
+        };
+
+        try {
+            const rootNode = readNodeRecursive(0);
+            
+            // 2. Controllo Finale di Validità (Byte Eccessivi)
+            if (readOffset !== data.length) {
+                console.warn(`Octree Deserialization Warning: ${data.length - readOffset} extraneous bytes found at the end of the chunk buffer. File may contain garbage data.`);
+            }
+
+            return rootNode;
+            
+        } catch (error) {
+            console.error(error.message);
+            // In caso di errore critico, restituiamo un Octree vuoto (Aria) per non bloccare il gioco.
+            return new OctreeNode(0, CONFIG.VOXEL_ID_AIR); 
+        }
     }
 
     /**
-     * Converte un OctreeNode in un ArrayBuffer binario compresso (Serializzazione).
-     * @param {OctreeNode} root Il nodo radice del Mini-Chunk.
-     * @returns {ArrayBuffer} Dati binari serializzati.
-     */
-    /**
-     * Converte un OctreeNode in un ArrayBuffer binario compresso (Serializzazione).
-     * @param {OctreeNode} root Il nodo radice del Mini-Chunk.
-     * @returns {ArrayBuffer} Dati binari serializzati.
+     * Serializza l'albero Octree a partire dalla radice in un ArrayBuffer binario.
+     * Utilizza la tecnica del byte unico per codificare lo stato (Foglia 0-254) o (Interno 255).
+     * @param {OctreeNode} root La radice dell'Octree da serializzare.
+     * @returns {ArrayBuffer} Il payload binario del chunk.
      */
     static serialize(root) {
         const bytes = [];
         
-        // Funzione ricorsiva che scrive i byte nell'array 'bytes'
+        // Funzione ricorsiva che esegue la traversata in Pre-ordine
         const writeNode = (node) => {
             
-            // 1. Scrive lo Stato (1 byte)
-            bytes.push(node.state); 
+            // 1. SCELTA DEL BYTE DI STATO/MATERIALE
+            let stateByte;
             
-            // --- Caso FOGLIA (EMPTY o SOLID) ---
             if (node.isLeaf()) {
-                // 2. Scrive il Material ID (1 byte)
-                // Se il nodo è vuoto, viene scritto CONFIG.VOXEL_ID_AIR (0).
-                // Se è solido, viene scritto il suo Material ID (1-254).
-                bytes.push(node.materialID); 
+                // Caso Foglia (EMPTY o SOLID):
+                // Scriviamo direttamente l'ID materiale (0-254).
+                stateByte = node.materialID;
                 
-                // NOTA SUL DC: Se devi salvare surfaceData, la logica andrebbe qui, 
-                // con un formato più complesso che include i float per posizione e normale.
+                // NOTA: Il materialID deve essere <= 254 (VOXEL_ID_CUT - 1)
+                // Se il nodo è stato erroneamente marcato come Foglia con ID 255, correggiamo a 0 per sicurezza.
+                if (stateByte >= CONFIG.VOXEL_ID_CUT) {
+                    console.warn(`Octree Serialization Warning: Leaf node found with ID ${stateByte}. Overriding to AIR (0).`);
+                    stateByte = CONFIG.VOXEL_ID_AIR;
+                }
+                
+                bytes.push(stateByte);
                 return;
             }
             
-            // --- Caso NODO INTERNO (MIXED) ---
+            // Caso Nodo Interno (MIXED):
+            // Scriviamo il flag riservato che indica che 8 figli seguono.
+            stateByte = CONFIG.VOXEL_ID_CUT; // Deve essere 255 (se CONFIG lo definisce così)
+            bytes.push(stateByte); 
             
-            // Ricorsione: Scrive gli 8 figli
-            for (let i = 0; i < 8; i++) {
-                if (node.children[i]) {
-                    writeNode(node.children[i]);
-                } else {
-                    // Questo non dovrebbe succedere se il pruning è corretto,
-                    // ma è un fallback di sicurezza.
-                    console.error("Errore di serializzazione: figlio nullo in nodo MIXED.");
+            // 2. RICORSIONE (solo per nodi MIXED/Interni)
+            if (node.children) {
+                for (let i = 0; i < 8; i++) {
+                    // Controlliamo che il figlio esista prima di scrivere
+                    if (node.children[i]) {
+                        writeNode(node.children[i]);
+                    } else {
+                         // Errore logico: un nodo MIXED deve sempre avere 8 figli validi.
+                         throw new Error(`Octree Serialization Error: Mixed node at level ${node.level} has a null child.`);
+                    }
                 }
+            } else {
+                 // Errore logico: un nodo non-foglia DEVE avere figli.
+                 throw new Error(`Octree Serialization Error: Internal node found without children at level ${node.level}.`);
             }
         };
 
-        // Inizia la scrittura dalla radice
-        writeNode(root);
-        
-        // Converte l'array di byte temporaneo in ArrayBuffer finale
-        return new Uint8Array(bytes).buffer;
+        try {
+            writeNode(root);
+            return new Uint8Array(bytes).buffer;
+        } catch (error) {
+            console.error("Critical Serialization Failure:", error);
+            // In caso di errore critico, restituisci un buffer vuoto (o un buffer con un solo nodo AIR)
+            return new Uint8Array([CONFIG.VOXEL_ID_AIR]).buffer; 
+        }
     }
 }

@@ -12,7 +12,8 @@ export class OctreeNode {
         SOLID: 1, // Foglia uniforme: interamente un Materiale solido.
         MIXED: 2  // Interno: Contiene stati diversi (deve essere suddiviso).
     };
-
+    
+    
     /**
      * @param {number} level Il livello di profondità.
      * @param {number} materialID L'ID del materiale uniforme (0 per Aria) se il nodo è una Foglia.
@@ -26,8 +27,15 @@ export class OctreeNode {
         // Stato di compressione (sempre derivato da materialID se uniforme)
         if (materialID === CONFIG.VOXEL_ID_AIR) {
             this.state = OctreeNode.STATE.EMPTY;
-        } else {
+            this.materialID = CONFIG.VOXEL_ID_AIR; // Mantieni 0
+        } else if(materialID === CONFIG.VOXEL_ID_CUT){
+            // Nodi interni/taglio: Non hanno un materiale uniforme.
+            this.state = OctreeNode.STATE.MIXED;
+            this.materialID = CONFIG.VOXEL_ID_CUT; // Mantieni il flag 255
+        } else { 
+            // Tutti gli altri ID (1 a 254) sono solidi
             this.state = OctreeNode.STATE.SOLID;
+            this.materialID = materialID;
         }
         
         // Array per 8 figli. È un array di 8 solo se lo stato è MIXED.
@@ -48,7 +56,7 @@ export class OctreeNode {
      * @returns {boolean}
      */
     isLeaf() {
-        return this.state !== OctreeNode.STATE.MIXED;
+        return this.state === null;
     }
     
     /**

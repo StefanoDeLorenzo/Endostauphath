@@ -55,7 +55,6 @@ export class OctreeSerializer {
                     node.children.push(child);
                 }
                 
-                // Lo stato è già impostato a MIXED nel costruttore se materialID è CUT
                 return node;
                 
             } else {
@@ -95,15 +94,14 @@ export class OctreeSerializer {
         const writeNode = (node) => {
             
             // 1. SCELTA DEL BYTE DI STATO/MATERIALE
-            let stateByte;
             
-            if (node.isLeaf()) {
-                // Caso Foglia (EMPTY o SOLID):
-                // Scriviamo direttamente l'ID materiale (0-254).
-                stateByte = node.materialID;
+            // CASO FOGLIA (0 - 254)
+            // Usiamo il materialID per la massima sicurezza, non solo isLeaf()
+            if (node.materialID !== CONFIG.VOXEL_ID_CUT) { 
+                
+                let stateByte = node.materialID;
                 
                 // NOTA: Il materialID deve essere <= 254 (VOXEL_ID_CUT - 1)
-                // Se il nodo è stato erroneamente marcato come Foglia con ID 255, correggiamo a 0 per sicurezza.
                 if (stateByte >= CONFIG.VOXEL_ID_CUT) {
                     console.warn(`Octree Serialization Warning: Leaf node found with ID ${stateByte}. Overriding to AIR (0).`);
                     stateByte = CONFIG.VOXEL_ID_AIR;
@@ -113,25 +111,21 @@ export class OctreeSerializer {
                 return;
             }
             
-            // Caso Nodo Interno (MIXED):
+            // CASO NODO INTERNO (MIXED - 255)
+
+            // **** CORREZIONE CRITICA DELL'ERRORE 'without children' ****
+            // Un nodo MIXED deve sempre avere l'array figli esistente e completo.
+            if (!node.children || node.children.length !== 8) {
+                 throw new Error(`Octree Serialization Error: Mixed node at level ${node.level} must have exactly 8 children. Found ${node.children ? node.children.length : 'none'}.`);
+            }
+            
             // Scriviamo il flag riservato che indica che 8 figli seguono.
-            stateByte = CONFIG.VOXEL_ID_CUT; // Deve essere 255 (se CONFIG lo definisce così)
-            bytes.push(stateByte); 
+            bytes.push(CONFIG.VOXEL_ID_CUT); // 255
             
             // 2. RICORSIONE (solo per nodi MIXED/Interni)
-            if (node.children) {
-                for (let i = 0; i < 8; i++) {
-                    // Controlliamo che il figlio esista prima di scrivere
-                    if (node.children[i]) {
-                        writeNode(node.children[i]);
-                    } else {
-                         // Errore logico: un nodo MIXED deve sempre avere 8 figli validi.
-                         throw new Error(`Octree Serialization Error: Mixed node at level ${node.level} has a null child.`);
-                    }
-                }
-            } else {
-                 // Errore logico: un nodo non-foglia DEVE avere figli.
-                 throw new Error(`Octree Serialization Error: Internal node found without children at level ${node.level}.`);
+            for (let i = 0; i < 8; i++) {
+                // Non serve controllare 'if (node.children[i])' se il controllo di lunghezza è passato
+                writeNode(node.children[i]);
             }
         };
 

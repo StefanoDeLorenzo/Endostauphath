@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Generatore e Serializzatore di File Regione</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        button { padding: 10px 20px; font-size: 16px; margin-top: 10px; cursor: pointer; }
+        #log { margin-top: 20px; padding: 10px; border: 1px solid #ccc; white-space: pre-wrap; background-color: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h1>Strumento di Generazione Voxel</h1>
+
+    <button id="selectDirButton">1. Seleziona Directory di Gioco</button>
+    <button id="generateAndSaveButton" disabled>2. Genera e Salva Regione (0,0,0)</button>
+    
+    <div id="log">Console:</div>
+
+    <script type="module" src="./generator.js"></script>
+</body>
+</html>

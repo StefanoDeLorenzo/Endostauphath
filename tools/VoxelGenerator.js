@@ -29,12 +29,13 @@ export class VoxelGenerator {
      */
     #generateNodeRecursive(level, vx, vy, vz, size, rx, ry, rz, chunkIndex) {
         
-        // 1. Raggiunto il livello base del voxel (Livello 4/5)
+        // 1. Raggiunto il livello base del voxel (Foglia finale)
         if (size <= 1) { 
-            // Questo è il livello di campionamento più fine per il Dual Contouring.
+            // Questo è il livello di campionamento più fine (materialID 0-254).
             const materialID = this.#getMaterialAtVoxel(rx, ry, rz, chunkIndex, vx, vy, vz);
             
             // Il nodo foglia finale non può essere ulteriormente suddiviso.
+            // Il costruttore imposterà lo stato a EMPTY/SOLID.
             return new OctreeNode(level, materialID); 
         }
 
@@ -60,36 +61,40 @@ export class VoxelGenerator {
 
             // Controlla se il volume è omogeneo
             if (childNode.isLeaf()) {
+                // Se è una foglia, controlla l'ID del materiale
                 if (firstMaterialID === -1) {
                     firstMaterialID = childNode.materialID;
                 } else if (firstMaterialID !== childNode.materialID) {
-                    isMixed = true;
+                    isMixed = true; // Diversi ID materiali tra le foglie
                 }
             } else {
-                isMixed = true; // Se un figlio non è una foglia, l'attuale è misto
+                isMixed = true; // Se un figlio non è una foglia (è già un nodo MIXED), l'attuale è misto
             }
         }
 
         // 3. Potatura (Pruning)
+        // Se non è misto E abbiamo trovato un materiale uniforme
         if (!isMixed && firstMaterialID !== -1) {
             // Tutti gli 8 figli sono foglie e hanno lo stesso materialID.
             // Ritorna una singola foglia al posto di 8 per massima compressione.
+            // Ereditiamo il materiale del volume
             return new OctreeNode(level, firstMaterialID);
         }
 
         // 4. Nodo Misto (MIXED)
+        // Se non potiamo, creiamo un nodo interno. 
+        // L'ID del materiale è CONFIG.VOXEL_ID_CUT (255) per indicare al Serializer che è MIXED.
         const parentNode = new OctreeNode(level, CONFIG.VOXEL_ID_CUT); 
-        parentNode.children = children; // La chiamata a initializeChildren è superflua, basta assegnare l'array
+        parentNode.children = children;
         return parentNode;
     }
 
     /**
      * Funzione fittizia per ottenere il Material ID in un punto specifico del Voxel.
-     * Questa è la funzione implicita che definisce la geometria del mondo.
      * @private
      */
     #getMaterialAtVoxel(rx, ry, rz, chunkIndex, vx, vy, vz) {
-        // Esempio: Generazione di un semplice piano inclinato
+        // ... (La logica resta la stessa) ...
         const worldY = (ry * CONFIG.REGION_CHUNKS_PER_SIDE_Y + this.#getLocalYFromIndex(chunkIndex) * CONFIG.MINI_CHUNK_SIDE_VOXELS + vy) * CONFIG.VOXEL_SIZE_METERS;
         
         // Se l'altezza del mondo è sotto un certo livello
@@ -99,7 +104,7 @@ export class VoxelGenerator {
         if (worldY < 12) {
             return 2; // ID Erba
         }
-        return CONFIG.VOXEL_ID_AIR; // Aria
+        return CONFIG.VOXEL_ID_AIR; // Aria (0)
     }
     
     /**

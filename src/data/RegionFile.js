@@ -21,10 +21,16 @@ export class RegionFile {
         this.ry = ry;
         this.rz = rz;
         
-        // ... (il resto del costruttore rimane uguale)
+        // Tabella Indici: Array di 128 record (uno per Mini-Chunk)
         this.indexTable = new Array(CONFIG.REGION_TOTAL_CHUNKS).fill(null);
         this.rawData = null; 
         this.isLoaded = false;
+
+        // Mappa da chunkIndex a ArrayBuffer del chunk serializzato.
+        this.chunkDataBuffers = new Map();
+        
+        // Flag che indica se il file è stato modificato in RAM e necessita di salvataggio
+        this.isDirty = false;
     }
 
     /**

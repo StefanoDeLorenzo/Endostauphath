@@ -1,6 +1,13 @@
 [build]
+  command = "echo 'No build command specified; serving static files.'"
   publish = "."
 
+[build.environment]
+  # Questa variabile d'ambiente dice a Netlify di saltare esplicitamente
+  # l'installazione di dipendenze se non c'è un comando di build valido.
+  # Anche se hai messo "echo", forzare questo garantisce il bypass.
+  NETLIFY_SKIP_INSTALL = "true"
+  
 [[headers]]
   for = "/*"
   [headers.values]

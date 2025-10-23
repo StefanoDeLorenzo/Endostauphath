@@ -3,6 +3,27 @@
  * * Classe per la gestione di un pool di Web Workers (Thread) pronti e riutilizzabili.
  * * Presuppone che tutti i worker eseguano lo stesso script (es. mesherWorker.js).
  * * Utilizza una logica round-robin per distribuire i compiti.
+ * Per mandare messaggi ai worker, usa un sistema simile a questo:
+ * 
+ * let isCancelled = false;
+ *
+ *  onmessage = (e) => {
+ *    if (e.data.command === 'cancel') {
+ *        isCancelled = true;
+ *       // Se il loop è bloccato, potremmo dover usare postMessage() per avvisare che è stato annullato
+ *        // e uscire forzatamente.
+ *        return; 
+ *    }
+ *    
+ *    // ... avvia elaborazione
+ *    for (let x = 0; x < 16; x++) {
+ *        for (let y = 0; y < 16; y++) {
+ *            if (isCancelled) return; // ESCI IMMEDIATAMENTE
+ *            // Logica di Dual Contouring...
+ *        }
+ *   }
+ *    // ...
+ * };
  */
 
 // Importiamo la configurazione per i valori di fallback
@@ -128,21 +149,20 @@ export class Threading {
     }
 
     /**
-     * Termina forzatamente un compito attivo.
-     * Nota: Questo non termina il worker stesso, ma solo l'associazione con il taskId.
-     * Se devi terminare un worker, devi usare un messaggio "cancel" al worker stesso,
-     * o chiamare terminateAll() per chiudere tutti i worker.
-     * @param {string} taskId - L'ID del compito da terminare.
-     * @returns {boolean} - True se il worker era mappato e l'associazione è stata rimossa.
+     * Invia un comando di 'cancel' al worker che sta gestendo il compito specificato.
+     * Il worker non viene terminato, ma ci si aspetta che interrompa l'elaborazione.
+     * @param {string} taskId - L'ID del compito da annullare.
+     * @returns {boolean} - True se il messaggio è stato inviato.
      */
     terminateTask(taskId) {
-        // Per annullare davvero un compito, dovremmo inviare un messaggio 'cancel' al worker.
-        // Qui, ci limitiamo a rimuovere l'associazione. Il worker finirà il suo lavoro.
         const worker = this.#activeWorkerMap.get(taskId);
         if (worker) {
-            console.log(`[Threading] Compito ${taskId} disassociato. Il worker completerà il lavoro.`);
-            // Potresti inviare un messaggio di annullamento qui, se il worker è progettato per riceverlo:
-            // worker.postMessage({ command: 'cancel', taskId: taskId });
+            console.log(`[Threading] Invio annullamento per il compito ${taskId}.`);
+            // Invia il messaggio 'cancel'. Il worker deve implementare la logica di interruzione.
+            worker.postMessage({ command: 'cancel', taskId: taskId });
+            
+            // Rimuoviamo l'associazione immediatamente. Il worker è ora disponibile per un nuovo compito
+            // anche se sta finendo di elaborare o è stato annullato.
             return this.#releaseTask(taskId);
         }
         return false;

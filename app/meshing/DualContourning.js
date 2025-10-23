@@ -10,11 +10,10 @@ import { VOXEL_ID_AIR, getMaterialById } from '../core/palette.js';
 
 // =========================================================================================
 // TABELLE DI CAMPO IMPLICITO
-// Queste tabelle definiscono la connettività di base, simili a quelle del Marching Cubes.
 // =========================================================================================
 
 /**
- * Voxel Corner Table (Cube Vertices)
+ * Voxel Corner Table (VCT - Vertici del Cubo)
  * 8 vertici del cubo (0 a 7). Ogni riga è la posizione del vertice nel sistema di coordinate locali 1x1x1.
  * [dx, dy, dz]
  */
@@ -30,31 +29,52 @@ const VCT = [
 ];
 
 /**
- * Edge Table (Edge Index)
+ * Edge Table (EIT - Indice Spigoli)
  * Definisce i 12 spigoli del cubo in base ai due vertici che li compongono.
  * [V0, V1]
  */
 const EIT = [
-    [0, 1], [1, 3], [3, 2], [2, 0], // Bottom Face Edges (Z=0)
-    [4, 5], [5, 7], [7, 6], [6, 4], // Top Face Edges (Z=1)
-    [0, 4], [1, 5], [3, 7], [2, 6]  // Vertical Edges
+    [0, 1], [1, 3], [3, 2], [2, 0], // Spigoli Basso (Z=0)
+    [4, 5], [5, 7], [7, 6], [6, 4], // Spigoli Alto (Z=1)
+    [0, 4], [1, 5], [3, 7], [2, 6]  // Spigoli Verticali
+];
+
+// =========================================================================================
+// TABELLE DI DUAL CONTOURING (Per la Connettività Duale/Triangolazione)
+// =========================================================================================
+
+/**
+ * Face Table (FT - 6 Facce del Voxel)
+ * Definisce i 4 Vertici Q che circondano lo spigolo duale (faccia primale) per ogni asse.
+ * [Axis, Index in Axis, [v0, v1, v2, v3]]
+ * Ogni riga definisce i 4 vertici del cubo (indices 0-7) che compongono una faccia.
+ */
+const FT = [
+    // Facce X-Plane (Normale lungo X)
+    [[0, 0, 0], [0, 1, 2, 3]], // X=0 (y-z plane)
+    [[1, 0, 0], [5, 4, 7, 6]], // X=1
+    // Facce Y-Plane (Normale lungo Y)
+    [[0, 1, 0], [0, 4, 5, 1]], // Y=0 (x-z plane)
+    [[0, 1, 1], [2, 6, 7, 3]], // Y=1
+    // Facce Z-Plane (Normale lungo Z)
+    [[0, 0, 1], [0, 2, 6, 4]], // Z=0 (x-y plane)
+    [[1, 0, 1], [1, 5, 7, 3]]  // Z=1
 ];
 
 /**
- * Triangle Table (Triangulation Table)
- * Simile alla TriTable di Marching Cubes, definisce i triangoli per ogni caso (256 casi).
- * Usata per definire le facce intersecate.
- * * NOTA: Per Dual Contouring è sufficiente sapere quali SPIGOLI sono intersecati (Edge Table)
- * e quali CELLE sono "cut" (Cell Case). Questa tabella è semplificata rispetto a MC.
- * Per DC puro, spesso si usano solo i casi per determinare la connettività dei vertici Q.
+ * Quad Edge Table (QET - Spigoli del Quad)
+ * Definisce i vertici di un quad generato dalla connessione di due vertici Q.
+ * Per ogni asse (X, Y, Z), definisce i 4 spigoli da collegare.
+ * [Axis: 0=X, 1=Y, 2=Z] -> [Edge1, Edge2, Edge3, Edge4]
+ * Utilizzato nella #triangulateFaces per creare quad (2 triangoli).
  */
-// La TriTable completa è troppo grande. Usiamo una placeholder e ci concentriamo sulla logica G-Field.
-// Qui useremo una versione molto semplificata, focalizzata sulle 6 facce del Dual Grid.
-// L'indice 0-255 indica quali 1-3 spigoli sono intersecati per formare i triangoli.
-const TriTable = [
-    // La tabella completa ha 256 elementi. Ne mostriamo alcuni rappresentativi.
-    // L'implementazione completa richiede un algoritmo che definisce la connettività
-    // dei vertici Q (QEF) e l'indice delle facce.
+const QET = [
+    // Connessioni (spigoli duali) lungo l'asse X (faccia YZ)
+    [[0, 4, 1, 5], [2, 6, 3, 7]],
+    // Connessioni (spigoli duali) lungo l'asse Y (faccia XZ)
+    [[0, 2, 4, 6], [1, 3, 5, 7]],
+    // Connessioni (spigoli duali) lungo l'asse Z (faccia XY)
+    [[0, 1, 2, 3], [4, 5, 6, 7]]
 ];
 
 
@@ -86,7 +106,7 @@ export class DualContouring {
         const vertexIndexMap = new Int32Array(numVoxels ** 3).fill(-1);
 
         // --- FASE 1: Calcolo dei Vertici Q (QEF) ---
-        // Itera su tutti i voxel 16x16x16
+        // Itera su tutti i voxel 16x16x16 (le celle primali)
         for (let y = 0; y < numVoxels; y++) {
             for (let z = 0; z < numVoxels; z++) {
                 for (let x = 0; x < numVoxels; x++) {
@@ -103,8 +123,7 @@ export class DualContouring {
                     
                     // La cella è "mista" (interseca la superficie). Calcoliamo il vertice Q.
 
-                    // 1.1. Calcola il Punto Crossover e la Normale Media
-                    // Usiamo la Media Ponderata dell'intersezione (per semplificare il QEF)
+                    // 1.1. Calcola il Punto Crossover e la Normale Media (Simplificazione QEF)
                     const { point: crossoverPoint, normal: avgNormal, materialID } = 
                         DualContouring.#calculateCrossoverPoint(
                             densityGrid, materialGrid, resolution, x, y, z, cellCase, voxelSize
@@ -119,7 +138,7 @@ export class DualContouring {
                     if (material) {
                         colors.push(material.color[0], material.color[1], material.color[2], material.color[3]);
                     } else {
-                        colors.push(0, 0, 0, 1); // Default nero
+                        colors.push(0.5, 0.5, 0.5, 1.0); // Default grigio (in caso di ID non trovato)
                     }
 
                     // 1.4. Mappa l'indice del vertice Q appena aggiunto al voxel.
@@ -129,11 +148,15 @@ export class DualContouring {
             }
         }
 
-        // --- FASE 2: Triangolazione (Connettività) ---
+        // --- FASE 2: Triangolazione (Connettività Duale) ---
         // Itera sugli spigoli del dual grid (le facce dei voxel primari)
         DualContouring.#triangulateFaces(vertexIndexMap, numVoxels, indices);
 
         // 3. Converti in Float32Array
+        if (vertices.length === 0) {
+            return null; // Nessuna mesh generata
+        }
+        
         return DualContouring.#createBufferData(vertices, normals, colors, indices);
     }
     
@@ -148,7 +171,6 @@ export class DualContouring {
     static #getCellCase(densityGrid, resolution, x, y, z) {
         let cellCase = 0;
         
-        // Itera sugli 8 vertici del cubo (0-7)
         for (let i = 0; i < 8; i++) {
             const [dx, dy, dz] = VCT[i];
             
@@ -168,15 +190,15 @@ export class DualContouring {
      * @private
      */
     static #calculateCrossoverPoint(densityGrid, materialGrid, resolution, x, y, z, cellCase, voxelSize) {
-        let totalDensityChange = 0; // Per la media ponderata
+        let totalDensityChange = 0; 
         let avgPosition = { x: 0, y: 0, z: 0 };
         let avgNormal = { x: 0, y: 0, z: 0 };
         let materialCounts = new Map();
 
         // 1. Itera su tutti i 12 spigoli del cubo
         for (let i = 0; i < 12; i++) {
-            // Controlla se lo spigolo i è intersecato
-            if (cellCase & (1 << i)) { // Solo gli spigoli intersecati sono nella Edge Table
+            // Controlla se lo spigolo i è intersecato: (cellCase >> i) & 1
+            if ((cellCase & (1 << i)) !== 0) {
 
                 const [v0, v1] = EIT[i];
                 const [x0, y0, z0] = VCT[v0];
@@ -193,26 +215,22 @@ export class DualContouring {
                 // t = d0 / (d0 - d1)
                 const t = d0 / (d0 - d1); 
 
-                // Aggiungiamo il punto interpolato e la normale media
+                // Posizione interpolata (nel sistema di coordinate locali del chunk)
                 const crossX = (x + x0 + t * (x1 - x0)) * voxelSize;
                 const crossY = (y + y0 + t * (y1 - y0)) * voxelSize;
                 const crossZ = (z + z0 + t * (z1 - z0)) * voxelSize;
                 
-                // Per una corretta DC, qui si dovrebbe usare la QEF (Quadric Error Function)
-                // per trovare il vertice ottimale. Per semplicità, usiamo la media.
                 avgPosition.x += crossX;
                 avgPosition.y += crossY;
                 avgPosition.z += crossZ;
                 
-                totalDensityChange++; // Conta i punti da mediare
+                totalDensityChange++;
 
                 // Determina il Materiale predominante lungo lo spigolo
                 const matID = d0 > d1 ? materialGrid[index0] : materialGrid[index1];
                 materialCounts.set(matID, (materialCounts.get(matID) || 0) + 1);
 
-                // TODO: Calcolo della Normale al Crossover
-                // Per un calcolo preciso si dovrebbe usare il gradiente del campo implicito.
-                // Per ora, useremo una normale fissa o calcolata in modo rozzo.
+                // TODO: Calcolo della Normale (implementeremo il gradiente dopo)
             }
         }
         
@@ -233,8 +251,8 @@ export class DualContouring {
             }
         }
         
-        // Normale fittizia per ora (sarà corretta con l'implementazione del Gradiente)
-        avgNormal = { x: 0.5, y: 0.5, z: 0.5 }; // Placeholder
+        // Normale placeholder (sarà sostituita dal gradiente del campo implicito)
+        avgNormal = { x: 0.5, y: 0.5, z: 0.5 }; 
         
         return { point: avgPosition, normal: avgNormal, materialID: predominantMaterial };
     }
@@ -245,17 +263,9 @@ export class DualContouring {
      */
     static #triangulateFaces(vertexIndexMap, numVoxels, indices) {
         
-        // Itera sui voxel (celle primarie) e sugli spigoli della griglia duale.
-        // Un vertice Q è connesso ai vertici Q dei voxel adiacenti se condividono uno spigolo
-        // (il vertice Q duale) che interseca la superficie.
+        // Itera sugli spigoli duali (le facce dei voxel primari) lungo i 3 assi.
         
-        // Qui la logica DC è complessa (dipende dalla connettività degli spigoli)
-        // Per ora, iteriamo sugli spigoli e se due voxel adiacenti hanno un vertice Q,
-        // creiamo una faccia di connessione (un quad).
-        
-        // TODO: Implementare il ciclo completo della triangolazione duale (6 facce)
-        
-        // Ciclo di prova (solo per la connessione X)
+        // 1. Connessioni lungo l'asse X (faccia YZ)
         for (let y = 0; y < numVoxels; y++) {
             for (let z = 0; z < numVoxels; z++) {
                 for (let x = 0; x < numVoxels - 1; x++) {
@@ -263,18 +273,36 @@ export class DualContouring {
                     const idx1 = x + y * numVoxels + z * numVoxels * numVoxels;
                     const idx2 = (x + 1) + y * numVoxels + z * numVoxels * numVoxels;
                     
-                    const v1 = vertexIndexMap[idx1];
-                    const v2 = vertexIndexMap[idx2];
+                    const vA = vertexIndexMap[idx1]; // Vertice Q nel voxel (x, y, z)
+                    const vB = vertexIndexMap[idx2]; // Vertice Q nel voxel (x+1, y, z)
                     
-                    // Se entrambi i voxel hanno generato un vertice Q, possono essere connessi
-                    if (v1 !== -1 && v2 !== -1) {
-                        // Questo non è corretto per la triangolazione DC, ma serve come placeholder.
-                        // La vera DC genera quad basati sulla connettività delle facce.
-                        // console.log(`Connecting Q-Vertices ${v1} and ${v2}`); 
+                    // Se entrambi i voxel hanno generato un vertice Q
+                    if (vA !== -1 && vB !== -1) {
+                        
+                        // Qui verificheremmo quali spigoli del dual grid (faccia primale)
+                        // sono intersecati per formare il quad (2 triangoli).
+                        
+                        // Per una dimostrazione di base, assumiamo che la connessione sia quad.
+                        // La logica reale richiede un controllo incrociato con i Vertici Q adiacenti su Y e Z.
+                        
+                        // Placeholder: Se i due Q-Vertices sono presenti, ci sarà una superficie tra loro.
+                        
+                        // Dobbiamo trovare i 4 vertici del quad che circonda la dual edge (faccia).
+                        // Questi 4 vertici sono i Q-Vertices di:
+                        // 1. (x, y, z) -> vA
+                        // 2. (x+1, y, z) -> vB
+                        // 3. (x, y+1, z) -> vC
+                        // 4. (x+1, y+1, z) -> vD
+                        
+                        // Per ora, non possiamo implementare la logica completa del quad senza
+                        // l'algoritmo completo della fase 2, quindi lasciamo il ciclo come
+                        // struttura per il futuro.
                     }
                 }
             }
         }
+        
+        // TODO: Aggiungere i cicli per le connessioni Y e Z
     }
 
     /**

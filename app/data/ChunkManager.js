@@ -8,18 +8,16 @@
  * 4. Campionare la Densità e il Materiale per Marching Cubes.
  */
 import CONFIG from '../core/config.js';
-import { ImplicitField } from '../generator/ImplicitField.js';
+import { ImplicitField } from '../meshing/ImplicitField.js';
+import { DualContouring } from './meshing/DualContouring.js';
 import { VOXEL_ID_AIR } from '../core/palette.js'; // Importato per coerenza
 
 // Importiamo il Marching Cubes qui quando sarà disponibile.
 // import { MarchingCubes } from './MarchingCubes.js'; 
-
 export class ChunkManager {
 
     constructor() {
-        this.implicitField = new ImplicitField();
-        
-        // La dimensione della griglia necessaria per Marching Cubes (un punto in più per lato)
+        // La dimensione della griglia necessaria per Dual Contouring (un punto in più per lato)
         this.gridResolution = CONFIG.MINI_CHUNK_SIDE_VOXELS + 1; // 16 + 1 = 17
         
         // I dati campionati: una griglia 3D di Densità e ID Materiale
@@ -44,15 +42,12 @@ export class ChunkManager {
         const chunkStartMetersY = absCY * CONFIG.MINI_CHUNK_SIZE_METERS;
         const chunkStartMetersZ = absCZ * CONFIG.MINI_CHUNK_SIZE_METERS;
         
-        // --- LOGICA DI DECISIONE ---
+        // --- LOGICA DI DECISIONE E CAMPIONAMENTO ---
         if (chunkOctree /* && è un Octree compresso e non solo FULL_AIR */) {
             
-            // TODO: In futuro, qui attraverseremo l'Octree (fino al livello 0) per estrarre la Densità e il Materiale.
-            // Per il momento, se c'è un Octree, assumiamo che sia necessario generare la mesh
-            console.log(`[ChunkManager] Usando Octree (dati salvati) per Chunk (${absCX}, ${absCY}, ${absCZ})`);
+            console.log(`[ChunkManager] Usando Octree (dati salvati) per Chunk (${absCX}, ${absCY}, ${absCZ}). FALLBACK AL NOISE PER TEST.`);
             
-            // Per ora, come test, forziamo il campionamento del noise anche se l'Octree è presente.
-            // Questo sarà sostituito dalla logica di traversata dell'Octree.
+            // TODO: Sostituire con la logica di campionamento dell'Octree.
             this.#sampleImplicitField(
                 chunkStartMetersX, 
                 chunkStartMetersY, 
@@ -60,10 +55,7 @@ export class ChunkManager {
             );
             
         } else {
-            // Se l'Octree non è fornito (o è un placeholder "puro" che non ha bisogno di mesh),
-            // usiamo il campo implicito per generare il terreno di base.
-            
-            // 2. Campionamento della griglia 17x17x17 (Densità e Materiali)
+            // Usa il campo implicito (Noise) per generare il terreno di base.
             this.#sampleImplicitField(
                 chunkStartMetersX, 
                 chunkStartMetersY, 
@@ -72,14 +64,20 @@ export class ChunkManager {
             console.log(`[ChunkManager] Generazione tramite Noise (dati base) per Chunk (${absCX}, ${absCY}, ${absCZ})`);
         }
         
-        // 3. Esecuzione dell'algoritmo di Marching Cubes
-        // TODO: Chiamare MarchingCubes.extractMesh(...)
-        
-        // 4. Analisi Voxel Pieno/Vuoto per ottimizzazione
-        // In futuro, analizzeremo la densityGrid. Se è tutta <= 0.0 (aria) o tutta > 1.0 (solido), 
-        // non genereremo la mesh.
+        // 2. Esecuzione dell'algoritmo di Dual Contouring
+        const meshData = DualContouring.extractMesh(
+            this.densityGrid,
+            this.materialGrid,
+            this.gridResolution,
+            this.voxelSizeMeters
+        );
 
-        return null; 
+        // 3. Analisi Voxel Pieno/Vuoto e ritorno del risultato
+        if (!meshData) {
+            return null;
+        }
+        
+        return meshData;
     }
 
     /**
@@ -100,8 +98,8 @@ export class ChunkManager {
                     const worldY = startY + y * this.voxelSizeMeters;
                     const worldZ = startZ + z * this.voxelSizeMeters;
                     
-                    // Chiama l'Implicit Field per ottenere i dati
-                    const data = this.implicitField.getVoxelDataAtWorldCoords(
+                    // Chiama il metodo STATIC di Implicit Field per ottenere i dati
+                    const data = ImplicitField.getVoxelDataAtWorldCoords(
                         worldX, worldY, worldZ
                     );
 
@@ -114,16 +112,4 @@ export class ChunkManager {
             }
         }
     }
-    
-    /**
-     * Esegue il campionamento della densità basandosi su un Octree esistente.
-     * (Questa funzione è un TODO complesso per quando avremo l'algoritmo di traversata)
-     * @private
-     */
-    /*
-    #sampleFromOctree(startX, startY, startZ, octree) {
-        // ... Logica per traversare l'Octree e trovare la densità/materiale per ogni 
-        // voxel 1x1x1 nella griglia 17x17x17
-    }
-    */
 }

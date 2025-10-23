@@ -6,7 +6,7 @@
  * * di preservare le features (angoli acuti) ed è più adatto per sistemi voxel modificabili.
  * * * La classe è statica (non richiede istanza) per essere utilizzata direttamente nei Web Worker.
  */
-import { VOXEL_ID_AIR, getMaterialById } from '../core/palette.js';
+import { VOXEL_ID_AIR, getMaterialById } from '../renderer/palette.js';
 
 // =========================================================================================
 // TABELLE DI CAMPO IMPLICITO

@@ -1,16 +1,1 @@
-# Dati di output generati e grandi
-data/regions/
-data/source/
-data/textures/
-
-# Dipendenze Node/NPM (se le installi in futuro)
 node_modules/
-
-# File di sistema e log
-*.log
-.DS_Store
-Thumbs.db
-create_project.ps1
-
-# File temporanei/cache
-/dist/
